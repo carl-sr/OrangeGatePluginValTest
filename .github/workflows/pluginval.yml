@@ -1,0 +1,92 @@
+name: OrangeGate
+
+on:
+  workflow_dispatch: # lets you run a build from the UI
+  push:
+
+# When pushing new commits, cancel any running builds on that branch
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_NAME: OrangeGate
+  BUILD_TYPE: Release
+  BUILD_DIR: Builds
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  CMAKE_BUILD_PARALLEL_LEVEL: 3
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+jobs:
+  build_and_test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # show all errors for each platform (vs. cancel jobs on error)
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            pluginval-binary: ./pluginval.exe
+            ccache: sccache
+
+    steps:
+
+    - name: Cache IPP (Windows)
+      if: runner.os == 'Windows'
+      id: cache-ipp
+      uses: actions/cache@v3
+      with:
+        key: ipp-v1
+        path: C:\Program Files (x86)\Intel\oneAPI\ipp
+
+    - name: Install IPP (Windows)
+      if: (runner.os == 'Windows') && (steps.cache-ipp.outputs.cache-hit != 'true')
+      shell: bash
+      run: |
+        curl --output oneapi.exe https://registrationcenter-download.intel.com/akdlm/irc_nas/19078/w_BaseKit_p_2023.0.0.25940_offline.exe
+        ./oneapi.exe -s -x -f oneapi
+        ./oneapi/bootstrapper.exe -s -c --action install --components=intel.oneapi.win.ipp.devel --eula=accept -p=NEED_VS2022_INTEGRATION=1 --log-dir=.
+
+    - name: Save IPP cache even on job fail
+      if: runner.os == 'Windows' && (steps.cache-ipp.outputs.cache-hit != 'true')
+      uses: actions/cache/save@v3
+      with:
+        path: C:\Program Files (x86)\Intel\oneAPI\ipp
+        key: ipp-v1
+
+    # This lets us use sscache on Windows
+    # We need to install ccache here for Windows to grab the right version
+    - name: Install Ninja (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: choco install ninja ccache
+
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        submodules: true # Get JUCE populated
+
+    - name: Setup Environment Variables
+      shell: bash
+      run: |
+        VERSION=$(cat VERSION)
+        echo "ARTIFACTS_PATH=${{ env.BUILD_DIR }}/${{ env.PROJECT_NAME }}_artefacts/${{ env.BUILD_TYPE }}" >> $GITHUB_ENV
+        echo "VST3_PATH=${{ env.PROJECT_NAME }}_artefacts/${{ env.BUILD_TYPE }}/VST3/${{ env.PROJECT_NAME }}.vst3" >> $GITHUB_ENV
+        echo "AU_PATH=${{ env.PROJECT_NAME }}_artefacts/${{ env.BUILD_TYPE }}/AU/${{ env.PROJECT_NAME }}.component" >> $GITHUB_ENV
+        echo "AUV3_PATH=${{ env.PROJECT_NAME }}_artefacts/${{ env.BUILD_TYPE }}/AUv3/${{ env.PROJECT_NAME }}.appex" >> $GITHUB_ENV
+        echo "PRODUCT_NAME=${{ env.PROJECT_NAME }}-$VERSION-${{ matrix.name }}" >> $GITHUB_ENV
+
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@main
+      with:
+        key: v3-${{ matrix.os }}-${{ matrix.type }}
+        variant: ${{ matrix.ccache }}
+
+    - name: Pluginval
+      working-directory: ${{ env.BUILD_DIR }}
+      shell: bash
+      run: |
+        curl -LO "https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_${{ matrix.name }}.zip"
+        7z x pluginval_${{ matrix.name }}.zip
+        ${{ matrix.pluginval-binary }} --strictness-level 10 --verbose --validate "${{ env.VST3_PATH }}"
