@@ -26,6 +26,13 @@ juce_add_plugin("${PROJECT_NAME}"
 
 target_compile_features("${PROJECT_NAME}" PRIVATE cxx_std_20)
 
+# target_compile_options("${PROJECT_NAME}" PRIVATE
+#   $<$<CXX_COMPILER_ID:MSVC>:/WX /W2>
+#   $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
+# )
+
+target_compile_options("${PROJECT_NAME}" PRIVATE "/WX /W2")
+
 set(SourceFiles
 	Source/OrangeGate.h
 	Source/AboutPage.cpp
