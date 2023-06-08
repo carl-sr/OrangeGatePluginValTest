@@ -31,6 +31,11 @@ jobs:
             ccache: sccache
 
     steps:
+    # This is just easier than debugging different compilers on different platforms
+    - name: Set up Clang
+      if: ${{ matrix.name != 'macOS' }}
+      uses: egor-tensin/setup-clang@v1
+      
     # This lets us use sscache on Windows
     # We need to install ccache here for Windows to grab the right version
     - name: Install Ninja (Windows)
@@ -41,7 +46,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
       with:
-        submodules: true # Get JUCE populated
+        submodules: recursive # Get JUCE populated
 
     - name: Configure
       shell: bash
