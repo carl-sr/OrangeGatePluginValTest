@@ -31,7 +31,11 @@ target_compile_features("${PROJECT_NAME}" PRIVATE cxx_std_20)
 #   $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
 # )
 
-target_compile_options("${PROJECT_NAME}" PRIVATE "/WX /W2")
+if(MSVC)
+  target_compile_options("${PROJECT_NAME}" PUBLIC /W4 /WX)
+else()
+  target_compile_options("${PROJECT_NAME}" PUBLIC -Wall -Wextra -Wpedantic -Werror)
+endif()
 
 set(SourceFiles
 	Source/OrangeGate.h
